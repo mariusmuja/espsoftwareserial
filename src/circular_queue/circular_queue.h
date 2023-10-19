@@ -46,6 +46,48 @@ using std::min;
 #define ALWAYS_INLINE_ATTR
 #endif
 
+
+namespace compat {
+// make_unique support for pre c++14
+
+#if __cplusplus >= 201402L // C++14 and beyond
+using std::make_unique;
+#else
+    // from https://stackoverflow.com/questions/17902405/how-to-implement-make-unique-function-in-c11/17902439#17902439
+    template<class T> struct _Unique_if {
+        typedef std::unique_ptr<T> _Single_object;
+    };
+
+    template<class T> struct _Unique_if<T[]> {
+        typedef std::unique_ptr<T[]> _Unknown_bound;
+    };
+
+    template<class T, size_t N> struct _Unique_if<T[N]> {
+        typedef void _Known_bound;
+    };
+
+    template<class T, class... Args>
+        typename _Unique_if<T>::_Single_object
+        make_unique(Args&&... args) {
+            return std::unique_ptr<T>(new T(std::forward<Args>(args)...));
+        }
+
+    template<class T>
+        typename _Unique_if<T>::_Unknown_bound
+        make_unique(size_t n) {
+            typedef typename std::remove_extent<T>::type U;
+            return std::unique_ptr<T>(new U[n]());
+        }
+
+    template<class T, class... Args>
+        typename _Unique_if<T>::_Known_bound
+        make_unique(Args&&...) = delete;
+#endif
+} // namespace compat
+
+
+
+
 /*!
     @brief  Instance class for a single-producer, single-consumer circular queue / ring buffer (FIFO).
             This implementation is lock-free between producer and consumer for the available(), peek(),
@@ -66,7 +108,7 @@ public:
     /*!
         @brief  Constructs a queue of the given maximum capacity.
     */
-    circular_queue(const size_t capacity) : m_bufSize(capacity + 1), m_buffer{ std::make_unique<T[]>(m_bufSize) }
+    circular_queue(const size_t capacity) : m_bufSize(capacity + 1), m_buffer{ compat::make_unique<T[]>(m_bufSize) }
     {
         m_inPos.store(0);
         m_outPos.store(0);
@@ -267,7 +309,7 @@ bool circular_queue<T, ForEachArg>::capacity(const size_t cap)
 {
     if (cap + 1 == m_bufSize) return true;
     else if (available() > cap) return false;
-    std::unique_ptr<T[] > buffer{ std::make_unique<T[]>(cap + 1) };
+    std::unique_ptr<T[] > buffer{ compat::make_unique<T[]>(cap + 1) };
     const auto available = pop_n(buffer, cap);
     m_buffer.reset(buffer);
     m_bufSize = cap + 1;
