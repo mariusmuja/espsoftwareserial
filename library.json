@@ -26,6 +26,6 @@
     ],
     "dependencies":
     {
-        "dok-net/ghostl": "^1.0.0"
+        "maxgerhardt/ghostl": "^1.0.0"
     }
 }
